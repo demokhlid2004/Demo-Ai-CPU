@@ -326,6 +326,11 @@ app.post("/api/test-model/:modelId", async (req, res) => {
   }
 });
 
+// Fallback for any unmatched /api/* routes to return JSON instead of HTML
+app.use("/api/*", (req, res) => {
+  res.status(404).json({ error: "API endpoint not found" });
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

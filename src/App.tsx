@@ -94,10 +94,16 @@ export default function App() {
       const res = await fetch("/api/models", {
         headers: { "Authorization": `Bearer ${token}` }
       });
-      const data = await res.json();
-      if (res.ok && data.models) {
-        setModels(data.models);
-        setIsAuthenticated(true);
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (res.ok && data.models) {
+          setModels(data.models);
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+          localStorage.removeItem("demo_ai_token");
+        }
       } else {
         setIsAuthenticated(false);
         localStorage.removeItem("demo_ai_token");
@@ -657,7 +663,7 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-white text-sm">cURL Request</h3>
                   <button
-                    onClick={() => copyToClipboard(`curl -X POST ${window.location.origin}/api/v1/chat \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer YOUR_MODEL_API_KEY" \\\n  -d '{"model": "demo-ai-1-8B", "message": "Hello World!"}'`, "curl")}
+                    onClick={() => copyToClipboard(`curl -X POST https://demo-ai-cpu.onrender.com/api/v1/chat \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer YOUR_MODEL_API_KEY" \\\n  -d '{"model": "demo-ai-1-8B", "message": "Hello World!"}'`, "curl")}
                     className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1.5"
                   >
                     <Copy className="w-3.5 h-3.5" />
@@ -665,7 +671,7 @@ export default function App() {
                   </button>
                 </div>
                 <pre className="p-4 rounded-xl bg-[#09090b] border border-zinc-800 text-xs text-blue-300 font-mono overflow-x-auto leading-relaxed">
-{`curl -X POST ${window.location.origin}/api/v1/chat \\
+{`curl -X POST https://demo-ai-cpu.onrender.com/api/v1/chat \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_MODEL_API_KEY" \\
   -d '{
