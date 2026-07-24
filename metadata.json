@@ -1,0 +1,6 @@
+{
+  "name": "demo-ai",
+  "description": "Multi-Model AI API System and Admin Dashboard supporting Hugging Face Gradio spaces and web views with Telegram OTP auth and per-model API keys",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
