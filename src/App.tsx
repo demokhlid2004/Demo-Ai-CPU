@@ -23,6 +23,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"models" | "playground" | "keys" | "docs" | "logs">("models");
   const [models, setModels] = useState<AIModelInfo[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>("demo-ai-video");
+  const [selectedDocModelId, setSelectedDocModelId] = useState<string>("demo-ai-chat");
+  const [activeCodeLang, setActiveCodeLang] = useState<"curl" | "js" | "python">("curl");
   
   // System Logs State
   const [systemLogs, setSystemLogs] = useState<Array<{ id: string; timestamp: string; type: 'info' | 'success' | 'error'; message: string; details?: any }>>([
@@ -1304,166 +1306,366 @@ export default function App() {
 
         {activeTab === "docs" && (
           <div className="space-y-6">
-            <div className="bg-[#18181b] p-6 rounded-2xl border border-zinc-800">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <FileCode className="w-5 h-5 text-blue-500" />
-                <span>API Documentation & Integration</span>
-              </h2>
-              <p className="text-sm text-zinc-400 mt-1">
-                دليل استدعاء الواجهات البرمجية (cURL Requests) لجميع النماذج المتاحة في النظام.
-              </p>
+            <div className="bg-[#18181b] p-6 rounded-2xl border border-zinc-800 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+                <div className="text-right">
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2 justify-end">
+                    <span>API Documentation & Integration (دليل مطوري النظام والـ APIs)</span>
+                    <FileCode className="w-5 h-5 text-blue-500" />
+                  </h2>
+                  <p className="text-sm text-zinc-400 mt-1">
+                    شرح تفصيلي شامل لكيفية إرسال الطلبات لكل نموذج عبر الـ API وكيفية معالجة الردود البرمجية.
+                  </p>
+                </div>
+                <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-800 flex items-center gap-2 self-start md:self-auto">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-xs font-semibold text-zinc-300">جميع نقاط النهاية نشطة (All Endpoints Active)</span>
+                </div>
+              </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-                {models.map((model) => (
-                  <div key={model.id} className="bg-[#09090b] p-6 rounded-2xl border border-zinc-800 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                          <span>{model.name}</span>
-                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
-                            {model.id}
-                          </span>
-                        </h3>
-                        <p className="text-xs text-zinc-400 mt-1">{model.description}</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          let bodyContent = `{\n    "model": "${model.id}",\n    "message": "Hello!"\n  }`;
-                          if (model.id === "demo-ai-video") {
-                            bodyContent = `{\n    "model": "${model.id}",\n    "image": "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png",\n    "prompt": "Animate image using Wan 2.2 14B I2V",\n    "duration_seconds": 3.5,\n    "frame_multiplier": 32,\n    "steps": 5\n  }`;
-                          } else if (model.id === "demo-ai-pro") {
-                            bodyContent = `{\n    "model": "${model.id}",\n    "audio": "<BASE64_AUDIO_DATA>",\n    "voice_choice": "Tina / 中文-甜甜"\n  }`;
-                          } else if (model.id === "demo-ai-image") {
-                            bodyContent = `{\n    "model": "${model.id}",\n    "image": "<BASE64_IMAGE_DATA>",\n    "prompt": "Transform into anime style",\n    "lora_adapter": "Photo-to-Anime"\n  }`;
-                          }
-                          const curlCmd = `curl -X POST https://demo-ai-cpu.onrender.com/api/v1/chat \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${model.apiKey || 'YOUR_MODEL_API_KEY'}" \\\n  -d '${bodyContent}'`;
-                          copyToClipboard(curlCmd, model.id);
-                        }}
-                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 transition-all shrink-0"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>{copiedKeyId === model.id ? "Copied!" : "Copy cURL"}</span>
-                      </button>
+              {/* General API Info & Gateway */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-[#09090b] p-5 rounded-xl border border-zinc-800 space-y-3 text-right">
+                  <h3 className="text-sm font-bold text-blue-400 uppercase tracking-wider">🔒 بوابات الاستدعاء والمفاتيح (Authentication & Gateway)</h3>
+                  <p className="text-xs text-zinc-300 leading-relaxed">
+                    يدعم النظام نوعين من مفاتيح الوصول لضمان حماية واستقرار العمليات البرمجية:
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 text-xs space-y-1.5 text-right">
+                      <span className="font-bold text-zinc-100 flex items-center gap-1.5 justify-end">
+                        <span>مفاتيح النماذج المخصصة (Per-Model Keys)</span>
+                        <Key className="w-3.5 h-3.5 text-blue-500" />
+                      </span>
+                      <p className="text-zinc-400 text-[11px] leading-normal">
+                        مفتاح مخصص لكل نموذج على حدة. يتيح الاستعلام فقط للنموذج المربوط به، ويرفض الوصول للنماذج الأخرى لتفادي التداخل في الصلاحيات.
+                      </p>
                     </div>
+                    <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 text-xs space-y-1.5 text-right">
+                      <span className="font-bold text-zinc-100 flex items-center gap-1.5 justify-end">
+                        <span>المفتاح الشامل أو المشرف (Master / Admin Key)</span>
+                        <Shield className="w-3.5 h-3.5 text-amber-500" />
+                      </span>
+                      <p className="text-zinc-400 text-[11px] leading-normal">
+                        مفتاح <code>da_key_master</code> أو رمز المشرف المخصص. يسمح بالوصول الكامل لجميع النماذج دون قيود، وهو مثالي لبناء لوحات التحكم العامة.
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-                    <pre className="p-4 rounded-xl bg-[#121215] border border-zinc-800/80 text-xs text-blue-300 font-mono overflow-x-auto leading-relaxed">
-{model.id === "demo-ai-video" ? `curl -X POST https://demo-ai-cpu.onrender.com/api/v1/chat \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${model.apiKey || 'YOUR_MODEL_API_KEY'}" \\
-  -d '{
-    "model": "demo-ai-video",
-    "image": "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png",
-    "prompt": "Animate image using Wan 2.2 14B I2V",
-    "duration_seconds": 3.5,
-    "frame_multiplier": 32,
-    "steps": 5
-  }'` : model.id === "demo-ai-pro" ? `curl -X POST https://demo-ai-cpu.onrender.com/api/v1/chat \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${model.apiKey || 'YOUR_MODEL_API_KEY'}" \\
-  -d '{
-    "model": "demo-ai-pro",
-    "audio": "<BASE64_AUDIO_DATA_OR_URL>",
-    "video": "<BASE64_VIDEO_DATA_OR_URL>",
-    "voice_choice": "Tina / 中文-甜甜",
-    "response_type": "both" // options: "both" | "text" | "audio"
-  }'` : model.id === "demo-ai-image" ? `curl -X POST https://demo-ai-cpu.onrender.com/api/v1/chat \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${model.apiKey || 'YOUR_MODEL_API_KEY'}" \\
-  -d '{
-    "model": "demo-ai-image",
-    "image": "<BASE64_IMAGE_DATA>",
-    "prompt": "Change style to Anime",
-    "lora_adapter": "Photo-to-Anime"
-  }'` : `curl -X POST https://demo-ai-cpu.onrender.com/api/v1/chat \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${model.apiKey || 'YOUR_MODEL_API_KEY'}" \\
-  -d '{
-    "model": "${model.id}",
-    "message": "Hello!"
-  }'`}
-                    </pre>
+                <div className="bg-[#09090b] p-5 rounded-xl border border-zinc-800 space-y-3 flex flex-col justify-between text-right">
+                  <div className="space-y-1.5">
+                    <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wider">📡 أساسيات الطلب (Request Headers)</h3>
+                    <p className="text-xs text-zinc-400">
+                      يجب تضمين المفتاح في ترويسة الطلب بأحد الأشكال التالية:
+                    </p>
+                  </div>
+                  <div className="space-y-2 font-mono text-[11px] text-zinc-300 bg-zinc-900 p-3 rounded-lg border border-zinc-800 text-left">
+                    <p className="text-blue-400">// Option A: Bearer Authorization</p>
+                    <p className="overflow-x-auto whitespace-nowrap">Authorization: Bearer &lt;API_KEY&gt;</p>
+                    <p className="text-blue-400 pt-1">// Option B: Custom Header</p>
+                    <p className="overflow-x-auto whitespace-nowrap">X-API-Key: &lt;API_KEY&gt;</p>
+                  </div>
+                </div>
+              </div>
 
-                    {(model.id === "demo-ai-video" || model.id === "demo-ai-1-8B") && (
-                      <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 space-y-2">
-                        <p className="font-semibold text-blue-200 flex items-center gap-1.5">
-                          <span>🎬 نموذج Demo-AI video (إنشاء فيديو من صورة):</span>
-                        </p>
-                        <p className="text-zinc-300 leading-relaxed">
-                          نموذج توليد وتصميم مقاطع الفيديو من الصور مدعوم بنموذج <strong>Wan 2.2 14B Image-to-Video</strong> مع تقنية <strong>Lightning LoRA</strong>. يتم إرسال الطلب من جانبنا باستخدام مفتاح API الخاّص بالنموذج، وتقوم المنظومة بمعالجة الطلب داخلياً وإرساله إلى Gradio API عبر مسار <code>/generate_video</code> بنظام الطلب المزدوج (POST ثم GET):
-                        </p>
-                        <div className="p-2.5 rounded-lg bg-[#09090b] border border-blue-500/20 font-mono text-[11px] text-zinc-400 overflow-x-auto space-y-1 dir-ltr">
-                          <p className="text-blue-400 font-semibold">// Internal Gradio Execution Flow (/generate_video):</p>
-                          <p>{`curl -X POST https://kulkas2pintu-wan555.hf.space/gradio_api/call/generate_video -s -H "Content-Type: application/json" -d '{"data": [{"path":"..."}, null, "Prompt", 1, "", 0.5, 0, 0, 0, true, 1, "FlowMatchEulerDiscrete", 0.5, "16", true, true]}'`} \</p>
-                          <p>{`  | awk -F'"' '{ print $4}' \\`}</p>
-                          <p>{`  | read EVENT_ID; curl -N https://kulkas2pintu-wan555.hf.space/gradio_api/call/generate_video/$EVENT_ID`}</p>
+              {/* Interactive Docs Panel */}
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 pt-4">
+                {/* Left: Model Selector List */}
+                <div className="lg:col-span-1 space-y-2">
+                  <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1 block text-right">اختر النموذج لتفاصيل الـ API</span>
+                  <div className="space-y-1.5">
+                    {models.map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => setSelectedDocModelId(m.id)}
+                        className={`w-full text-right p-3 rounded-xl border flex items-center justify-between transition-all ${
+                          selectedDocModelId === m.id
+                            ? 'bg-blue-600/10 border-blue-500/50 text-white font-semibold'
+                            : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                        }`}
+                      >
+                        <div className="text-right">
+                          <p className="text-xs font-bold">{m.name}</p>
+                          <p className="text-[10px] text-zinc-500 font-mono mt-0.5">{m.id}</p>
                         </div>
-                      </div>
-                    )}
+                        <span className={`w-2 h-2 rounded-full shrink-0 ml-2 ${
+                          m.id === "demo-ai-hr" ? "bg-emerald-500" :
+                          m.id === "demo-ai-video" ? "bg-blue-500" :
+                          m.id === "demo-ai-chat" ? "bg-purple-500" :
+                          m.id === "demo-ai-pro" ? "bg-indigo-500" : "bg-amber-500"
+                        }`}></span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                    {model.id === "demo-ai-pro" && (
-                      <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-200 space-y-3">
-                        <div className="font-bold text-purple-300 text-sm flex items-center gap-2">
-                          <span>🎙️ Demo-AI Pro (Omni) — دعم مدخلات الوسائط الصوتيّة والمرئية (/media_predict)</span>
-                        </div>
-                        <p className="text-zinc-300 leading-relaxed">
-                          يتيح نموذج Demo-AI Pro معالجة الوسائط المتعددة بدقة عالية عبر مسار <code>/media_predict</code>. تدعم المنظومة الطرق التالية لإرسال البيانات:
-                        </p>
-                        <ul className="space-y-1.5 text-zinc-300 list-disc list-inside bg-[#09090b]/60 p-3 rounded-lg border border-purple-500/20">
-                          <li><strong className="text-purple-300">🎙️ التسجيل الصوتي المباشر:</strong> تسجيل الصوت فورياً وإرساله بصيغة FileData.</li>
-                          <li><strong className="text-purple-300">📁 رفع ملف صوتي:</strong> إمكانية رفع مقاطع صوتية من الجهاز (WAV, MP3, WEBM).</li>
-                          <li><strong className="text-purple-300">🎥 رفع مقطع فيديو:</strong> إضافة خيار رفع ملف فيديو لمعالجته ضمن النموذج عبر معامل <code>video</code>.</li>
-                        </ul>
+                {/* Right: Detailed Model Documentation */}
+                <div className="lg:col-span-3 bg-[#09090b] p-6 rounded-xl border border-zinc-800 space-y-6">
+                  {(() => {
+                    const activeModel = models.find(m => m.id === selectedDocModelId) || models[0];
+                    if (!activeModel) return <div className="text-zinc-500 text-xs text-right">جاري تحميل البيانات...</div>;
 
-                        <div className="pt-2 border-t border-purple-500/20 space-y-2">
-                          <p className="font-semibold text-purple-300">⚙️ تحديد نوع الرد المطلوب (Response Format Modes):</p>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                            <div className="p-2.5 rounded-lg bg-[#09090b] border border-purple-500/20 text-[11px] space-y-1">
-                              <span className="text-green-400 font-bold block">1️⃣ نص + مقطع صوتي (both)</span>
-                              <p className="text-zinc-400">إرجاع الرد النصي المكتوب ورابط المقطع الصوتي للتشغيل المباشر.</p>
-                              <code className="text-purple-300 font-mono block text-[10px]">"response_type": "both"</code>
+                    // Compute specific documentation variables
+                    let pathInfo = "/api/v1/chat";
+                    let modelKey = activeModel.apiKey || "da_key_xxxxxxxx";
+                    let reqParameters = [
+                      { name: "model", type: "String", req: "مستحسن (Optional)", desc: `معرّف النموذج المراد استدعاؤه وهو (<code>${activeModel.id}</code>). إذا لم يتم إرساله، سيتحدد تلقائياً بناءً على مفتاح الـ API المستخدم.` }
+                    ];
+
+                    let respFields = [
+                      { name: "success", type: "Boolean", desc: "حالة الطلب البرمجي وتكون <code>true</code> في حال النجاح." },
+                      { name: "model", type: "String", desc: `معرّف النموذج الذي قام بالمعالجة وهو <code>${activeModel.id}</code>.` },
+                      { name: "cleaned_text", type: "String", desc: "النص النهائي المصفى من الرد والجاهز للعرض المباشر في واجهتك." },
+                      { name: "data", type: "Array / Object", desc: "الرد الخام الكامل المستلم من بيئة المعالجة (Gradio Output Data) للتحكم الدقيق." }
+                    ];
+
+                    let curlPayload = "";
+                    let jsCode = "";
+                    let pythonCode = "";
+
+                    if (activeModel.id === "demo-ai-chat") {
+                      pathInfo = "/api/v1/chat";
+                      reqParameters.push(
+                        { name: "message", type: "String", req: "مطلوب (Required)", desc: "النص أو السؤال المرسل من قبل المستخدم للدردشة والمحاورة." },
+                        { name: "system_prompt", type: "String", req: "اختياري (Optional)", desc: "التعليمات البرمجية أو الخلفية المعرفية والتوجيهات المخصصة للذكاء الاصطناعي." },
+                        { name: "think_level", type: "String", req: "اختياري (Optional)", desc: "مستوى التفكير والتحليل المنطقي والـ Reasoning المطلوبة: <code>'high'</code> | <code>'medium'</code> | <code>'low'</code>." },
+                        { name: "history", type: "Array", req: "اختياري (Optional)", desc: "سجل الرسائل السابقة للحفاظ على سياق المحادثة وصيغتها: <code>[{role: 'user', content: '...'}, ...]</code>." }
+                      );
+                      curlPayload = `{\n  "model": "demo-ai-chat",\n  "message": "كيف يمكنني دمج الـ API في برنامجي؟",\n  "system_prompt": "أنت مساعد برمجيات خبير ومختصر وجوابك بالعربية.",\n  "think_level": "high"\n}`;
+                    } else if (activeModel.id === "demo-ai-video") {
+                      pathInfo = "/api/v1/predict";
+                      reqParameters.push(
+                        { name: "image", type: "String (Base64 / URL)", req: "مطلوب (Required)", desc: "الصورة المطلوب تحريكها إما كرابط URL مباشر أو بصيغة Base64 كاملة." },
+                        { name: "prompt", type: "String", req: "اختياري (Optional)", desc: "الوصف النصي للحركة المطلوبة في الفيديو (مثال: 'Animate rain falling softly')." },
+                        { name: "duration_seconds", type: "Number", req: "اختياري (Optional)", desc: "مدة مقطع الفيديو المراد توليده بالثواني (الافتراضي <code>3.5</code> ثانية)." },
+                        { name: "frame_multiplier", type: "Number", req: "اختياري (Optional)", desc: "عدد الإطارات في الثانية (FPS)، الخيارات المتاحة: <code>16</code> | <code>32</code> | <code>64</code> | <code>128</code>." },
+                        { name: "steps", type: "Number", req: "اختياري (Optional)", desc: "عدد خطوات تكرار تنقية جودة الفيديو (Inference steps) من 1 إلى 30." }
+                      );
+                      curlPayload = `{\n  "model": "demo-ai-video",\n  "image": "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png",\n  "prompt": "تحريك الحافلة لتبدو وكأنها تسير في الشارع بسرعة",\n  "duration_seconds": 3.5,\n  "frame_multiplier": 32,\n  "steps": 10\n}`;
+                    } else if (activeModel.id === "demo-ai-pro") {
+                      pathInfo = "/api/v1/predict";
+                      reqParameters.push(
+                        { name: "audio", type: "String (Base64 / URL)", req: "اختياري (Optional)", desc: "ملف التسجيل الصوتي المباشر أو المرفوع كبيانات Base64 أو رابط مباشر لمعالجته." },
+                        { name: "video", type: "String (Base64 / URL)", req: "اختياري (Optional)", desc: "مقطع الفيديو المرفق كـ Base64 أو رابط مباشر لتحليل محتواه وتصويره." },
+                        { name: "message", type: "String", req: "اختياري (Optional)", desc: "الاستفسار المكتوب الموجه لنموذج Omni متعدد الوسائط." },
+                        { name: "voice_choice", type: "String", req: "اختياري (Optional)", desc: "اسم الصوت المفضل لتوليد الرد الصوتي، الافتراضي: <code>'Tina / 中文-甜甜'</code>." },
+                        { name: "response_type", type: "String", req: "اختياري (Optional)", desc: "نوع الاستجابة المطلوبة: <code>'both'</code> (نص + صوت) | <code>'text'</code> (نص فقط) | <code>'audio'</code> (صوت فقط)." }
+                      );
+                      curlPayload = `{\n  "model": "demo-ai-pro",\n  "audio": "<BASE64_AUDIO_DATA>",\n  "voice_choice": "Tina / 中文-甜甜",\n  "response_type": "both"\n}`;
+                    } else if (activeModel.id === "demo-ai-image") {
+                      pathInfo = "/api/v1/predict";
+                      reqParameters.push(
+                        { name: "image", type: "String (Base64 / URL)", req: "مطلوب (Required)", desc: "الصورة الأصلية المراد تحريرها أو تطبيق فلتر الفن أو الأنمي عليها." },
+                        { name: "prompt", type: "String", req: "مطلوب (Required)", desc: "النص التفصيلي للتعديلات المطلوبة (مثال: 'convert style into cyberpunk')." },
+                        { name: "lora_adapter", type: "String", req: "اختياري (Optional)", desc: "الفلتر المطبق، افتراضياً: <code>'Photo-to-Anime'</code>." }
+                      );
+                      curlPayload = `{\n  "model": "demo-ai-image",\n  "image": "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png",\n  "prompt": "تحويل هذه الصورة إلى أسلوب الأنمي الياباني القديم",\n  "lora_adapter": "Photo-to-Anime"\n}`;
+                    } else if (activeModel.id === "demo-ai-hr") {
+                      pathInfo = "/api/v1/chat";
+                      reqParameters.push(
+                        { name: "message", type: "String", req: "مطلوب (Required)", desc: "الاستفسار الموجه لنظام الموارد البشرية والـ HR والتشغيل الداخلي للبيئة." }
+                      );
+                      curlPayload = `{\n  "model": "demo-ai-hr",\n  "message": "كيف يمكنني تحديث بيانات الموظفين؟"\n}`;
+                    }
+
+                    // Create codes
+                    jsCode = `const apiKey = "${modelKey}";\nconst url = "http://\${window.location.host}${pathInfo}";\n\nconst payload = ${curlPayload};\n\nfetch(url, {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "Authorization": \`Bearer \${apiKey}\`\n  },\n  body: JSON.stringify(payload)\n})\n.then(response => response.json())\n.then(result => {\n  console.log("Success:", result.success);\n  console.log("Text response:", result.cleaned_text);\n  console.log("Raw Response Data:", result.data);\n})\n.catch(error => console.error("Error:", error));`;
+
+                    pythonCode = `import requests\n\napi_key = "${modelKey}"\nurl = "http://127.0.0.1:3000${pathInfo}"\n\nheaders = {\n    "Content-Type": "application/json",\n    "Authorization": f"Bearer {api_key}"\n}\n\npayload = ${curlPayload.replace(/true/g, 'True').replace(/false/g, 'False').replace(/null/g, 'None')}\n\ntry:\n    response = requests.post(url, headers=headers, json=payload)\n    data = response.json()\n    if data.get("success"):\n        print("Success!")\n        print("Cleaned Text Output:", data.get("cleaned_text"))\n        print("Raw Gradio Data:", data.get("data"))\n    else:\n        print("Error:", data.get("error"))\nexcept Exception as e:\n    print("Connection failed:", e)`;
+
+                    return (
+                      <div className="space-y-6">
+                        {/* Header info */}
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-4 text-right">
+                          <div className="order-2 md:order-1 text-right w-full md:w-auto">
+                            <div className="flex items-center gap-2 flex-row-reverse">
+                              <span className="text-[10px] px-2.5 py-0.5 rounded bg-blue-500/15 text-blue-400 font-mono border border-blue-500/20 font-bold uppercase tracking-wider">
+                                {activeModel.type} Model
+                              </span>
+                              <h3 className="text-lg font-bold text-white">{activeModel.name}</h3>
                             </div>
-                            <div className="p-2.5 rounded-lg bg-[#09090b] border border-purple-500/20 text-[11px] space-y-1">
-                              <span className="text-blue-400 font-bold block">2️⃣ رد نصي فقط (text)</span>
-                              <p className="text-zinc-400">إرجاع نص الرد فقط وتصفية المقطع الصوتي.</p>
-                              <code className="text-purple-300 font-mono block text-[10px]">"response_type": "text"</code>
-                            </div>
-                            <div className="p-2.5 rounded-lg bg-[#09090b] border border-purple-500/20 text-[11px] space-y-1">
-                              <span className="text-amber-400 font-bold block">3️⃣ رد صوتي فقط (audio)</span>
-                              <p className="text-zinc-400">إرجاع رابط المقطع الصوتي فقط لتشغيله أو تحميله مباشرة.</p>
-                              <code className="text-purple-300 font-mono block text-[10px]">"response_type": "audio"</code>
-                            </div>
+                            <p className="text-xs text-zinc-400 mt-1">{activeModel.description}</p>
+                            <p className="text-[10px] text-zinc-500 font-mono mt-0.5 dir-ltr">Space: {activeModel.space} | Endpoint: {activeModel.endpoint || "Default"}</p>
+                          </div>
+
+                          {/* Fast Action */}
+                          <div className="flex items-center gap-2 order-1 md:order-2 self-start md:self-auto">
+                            <span className="text-[10px] text-zinc-500 font-mono">مسار الطلب:</span>
+                            <span className="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-blue-400 font-mono font-bold">
+                              POST {pathInfo}
+                            </span>
                           </div>
                         </div>
 
-                        <div className="p-2.5 rounded-lg bg-[#09090b] border border-purple-500/20 font-mono text-[11px] text-zinc-400 overflow-x-auto space-y-1 dir-ltr">
-                          <p className="text-purple-400 font-semibold">// Internal Gradio Execution Flow (/media_predict):</p>
-                          <p>{`curl -X POST https://qwen-qwen3-5-omni-online-demo.hf.space/gradio_api/call/media_predict -s -H "Content-Type: application/json" -d '{`}</p>
-                          <p>{`  "data": [`}</p>
-                          <p>{`    {"path":"https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav","meta":{"_type":"gradio.FileData"}},`}</p>
-                          <p>{`    null,`}</p>
-                          <p>{`    [],`}</p>
-                          <p>{`    "Tina / 中文-甜甜",`}</p>
-                          <p>{`    0.1,`}</p>
-                          <p>{`    0.05,`}</p>
-                          <p>{`    1`}</p>
-                          <p>{`  ]`}</p>
-                          <p>{`}' | awk -F'"' '{ print $4}' \\`}</p>
-                          <p>{`  | read EVENT_ID; curl -N https://qwen-qwen3-5-omni-online-demo.hf.space/gradio_api/call/media_predict/$EVENT_ID`}</p>
+                        {/* API Key Box */}
+                        <div className="p-4 rounded-xl bg-blue-950/20 border border-blue-500/30 text-xs space-y-2.5 text-right">
+                          <div className="flex items-center justify-between flex-row-reverse">
+                            <span className="font-bold text-blue-300 flex items-center gap-1.5 flex-row-reverse">
+                              <Key className="w-4 h-4 text-blue-400 font-bold" />
+                              <span>مفتاح الوصول البرمجي السريع الخاص بك (Model API Key)</span>
+                            </span>
+                            <span className="text-[10px] text-zinc-500">مقيّد للوصول لهذا النموذج فقط</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="password"
+                              readOnly
+                              value={modelKey}
+                              className="w-full px-3 py-2 rounded-xl bg-black/50 border border-zinc-800 text-zinc-300 font-mono text-xs text-left"
+                            />
+                            <button
+                              onClick={() => copyToClipboard(modelKey, activeModel.id)}
+                              className="p-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-all shrink-0 flex items-center justify-center cursor-pointer"
+                              title="نسخ المفتاح"
+                            >
+                              {copiedKeyId === activeModel.id ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Request parameters Table */}
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider text-right">📥 معطيات الطلب (Request JSON Body Fields)</h4>
+                          <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-[#09090b]">
+                            <table className="w-full text-xs text-right border-collapse">
+                              <thead>
+                                <tr className="bg-zinc-900/60 border-b border-zinc-800 text-zinc-400">
+                                  <th className="p-3 font-semibold text-left">اسم المتغير (Field)</th>
+                                  <th className="p-3 font-semibold">النوع (Type)</th>
+                                  <th className="p-3 font-semibold">حالة الحقل</th>
+                                  <th className="p-3 font-semibold">الوصف والخيارات (Arabic Description)</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-800/80 text-zinc-300">
+                                {reqParameters.map((param, index) => (
+                                  <tr key={index} className="hover:bg-zinc-900/40 transition-colors">
+                                    <td className="p-3 font-mono text-blue-400 text-left">{param.name}</td>
+                                    <td className="p-3 font-mono text-zinc-400">{param.type}</td>
+                                    <td className="p-3 font-medium">
+                                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                        param.req.includes("مطلوب") ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                                      }`}>
+                                        {param.req}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 leading-relaxed text-zinc-300 text-right" dangerouslySetInnerHTML={{ __html: param.desc }}></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Response fields Table */}
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider text-right">📤 مخرجات الرد (Response JSON Output Structure)</h4>
+                          <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-[#09090b]">
+                            <table className="w-full text-xs text-right border-collapse">
+                              <thead>
+                                <tr className="bg-zinc-900/60 border-b border-zinc-800 text-zinc-400">
+                                  <th className="p-3 font-semibold text-left">اسم الحقل (Property)</th>
+                                  <th className="p-3 font-semibold">النوع (Type)</th>
+                                  <th className="p-3 font-semibold">شرح التفاصيل البرمجية (Description)</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-800/80 text-zinc-300">
+                                {respFields.map((field, index) => (
+                                  <tr key={index} className="hover:bg-zinc-900/40 transition-colors">
+                                    <td className="p-3 font-mono text-purple-400 text-left">{field.name}</td>
+                                    <td className="p-3 font-mono text-zinc-400">{field.type}</td>
+                                    <td className="p-3 leading-relaxed text-zinc-300 text-right" dangerouslySetInnerHTML={{ __html: field.desc }}></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Interactive Code Samples Tab */}
+                        <div className="space-y-3 text-right">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-2">
+                            <button
+                              onClick={() => {
+                                const codeContent = activeCodeLang === "curl" ? `curl -X POST http://\${window.location.host}${pathInfo} \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${modelKey}" \\\n  -d '${curlPayload}'` : activeCodeLang === "js" ? jsCode : pythonCode;
+                                copyToClipboard(codeContent, "snip");
+                              }}
+                              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 transition-all cursor-pointer self-start md:self-auto"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>{copiedKeyId === "snip" ? "تم النسخ!" : "نسخ الكود"}</span>
+                            </button>
+                            
+                            <div className="flex items-center gap-2 justify-end self-end md:self-auto">
+                              <span className="text-xs text-zinc-500">مثال الكود (Code Snippet):</span>
+                              <div className="flex bg-zinc-900 rounded-lg p-1 border border-zinc-800">
+                                {(["curl", "js", "python"] as const).map((lang) => (
+                                  <button
+                                    key={lang}
+                                    onClick={() => setActiveCodeLang(lang)}
+                                    className={`px-3 py-1 rounded-md text-[11px] font-bold font-mono transition-all uppercase cursor-pointer ${
+                                      activeCodeLang === lang
+                                        ? 'bg-blue-600 text-white shadow'
+                                        : 'text-zinc-400 hover:text-zinc-200'
+                                    }`}
+                                  >
+                                    {lang === "js" ? "Node.js (Fetch)" : lang}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <pre className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 font-mono overflow-x-auto leading-relaxed text-left">
+                            {activeCodeLang === "curl" ? `curl -X POST http://\${window.location.host}${pathInfo} \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${modelKey}" \\
+  -d '${curlPayload}'` : activeCodeLang === "js" ? jsCode : pythonCode}
+                          </pre>
                         </div>
                       </div>
-                    )}
-
-                    {model.id === "demo-ai-image" && (
-                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 space-y-1">
-                        <p className="font-semibold text-amber-200">🖼️ نموذج demo-ai-image:</p>
-                        <p className="text-zinc-400 leading-normal">
-                          نموذج متخصص في تحرير وتعديل الصور عبر إرسال الصورة والوصف المطلوب (Prompt).
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    );
+                  })()}
+                </div>
               </div>
+
+              {/* Advanced Error Codes Reference & Troubleshooting Panel */}
+              <div className="bg-[#09090b] p-6 rounded-xl border border-zinc-800 space-y-4 pt-5">
+                <h3 className="text-sm font-bold text-rose-400 uppercase tracking-wider text-right flex items-center gap-2 justify-end">
+                  <span>الأخطاء الشائعة وحلولها البرمجية (Troubleshooting & API Status Codes)</span>
+                  <AlertCircle className="w-4 h-4 text-rose-400" />
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2 text-right">
+                    <span className="font-mono text-rose-400 font-extrabold text-sm block">400 Bad Request</span>
+                    <h5 className="font-bold text-xs text-white">خطأ في المتغيرات (Param Error)</h5>
+                    <p className="text-[11px] text-zinc-400 leading-normal">
+                      يحدث عند عدم تضمين الحقول المطلوبة (كإرسال طلب توليد فيديو بدون صورة). تأكد من إرسال الحقول المطلوبة بنجاح ومطابقة أسماء المتغيرات.
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2 text-right">
+                    <span className="font-mono text-rose-400 font-extrabold text-sm block">401 Unauthorized</span>
+                    <h5 className="font-bold text-xs text-white">غياب مفتاح الـ API Key</h5>
+                    <p className="text-[11px] text-zinc-400 leading-normal">
+                      لم يتم تمرير أي مفتاح في الترويسة. تأكد من إرسال <code>Authorization: Bearer &lt;key&gt;</code> أو <code>X-API-Key</code> بوضوح.
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2 text-right">
+                    <span className="font-mono text-rose-400 font-extrabold text-sm block">403 Forbidden / Mismatch</span>
+                    <h5 className="font-bold text-xs text-white">عدم مطابقة المفتاح للنموذج</h5>
+                    <p className="text-[11px] text-zinc-400 leading-normal">
+                      لقد استخدمت مفتاح وصول لنموذج مخصص (مثل مفتاح Chat) لطلب نموذج آخر (مثل Video). استخدم مفتاح النموذج المناسب أو المفتاح الشامل <code>da_key_master</code>.
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2 text-right">
+                    <span className="font-mono text-rose-400 font-extrabold text-sm block">500 Server Error</span>
+                    <h5 className="font-bold text-xs text-white">خطأ في بيئة المعالجة (Gradio Error)</h5>
+                    <p className="text-[11px] text-zinc-400 leading-normal">
+                      فشل الاتصال بمزود الذكاء الاصطناعي أو نفاد حصة المعالجة المجانية (ZeroGPU Space quota). يرجى الانتظار بضع ثوانٍ وإعادة إرسال طلبك.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
         )}

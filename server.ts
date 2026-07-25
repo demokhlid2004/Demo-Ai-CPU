@@ -377,25 +377,290 @@ app.post("/api/models/:modelId/regenerate-key", verifyAdminSession, (req, res) =
 });
 
 // Public / API Gateway for AI models using API Key auth
+// Public / API Gateway for AI models using API Key auth
 function verifyApiKey(req: express.Request, res: express.Response, next: express.NextFunction) {
   const apiKey = req.headers["x-api-key"] || (req.headers.authorization && req.headers.authorization.split(" ")[1]);
-  const modelId = req.body.model || req.query.model || req.params.modelId;
+  const requestedModel = req.body.model || req.query.model || req.params.modelId;
 
   if (!apiKey) {
-    return res.status(401).json({ error: "Missing API Key. Provide via X-API-Key header or Authorization Bearer." });
+    return res.status(401).json({
+      success: false,
+      error: "Missing API Key. Provide via X-API-Key header or Authorization Bearer."
+    });
   }
 
-  // Check if API key matches any model
+  // Check if API key matches any model or master key
   const matchedModel = Object.keys(modelApiKeys).find(k => modelApiKeys[k] === apiKey);
-  if (!matchedModel) {
-    return res.status(403).json({ error: "Invalid API Key" });
+  const isMasterKey = apiKey === "da_key_master" || apiKey === process.env.ADMIN_PASS || apiKey === ADMIN_PASS;
+  const isValidKey = matchedModel || isMasterKey;
+
+  if (!isValidKey) {
+    return res.status(403).json({
+      success: false,
+      error: "Invalid API Key."
+    });
   }
 
-  (req as any).authorizedModel = matchedModel;
+  // If using a model-specific API key (not master), restrict access only to its own model
+  if (matchedModel && requestedModel && requestedModel !== matchedModel && !isMasterKey) {
+    return res.status(403).json({
+      success: false,
+      error: `API Key mismatch. The provided API key is authorized only for model '${matchedModel}', but you requested model '${requestedModel}'.`
+    });
+  }
+
+  // Target model priority: URL param > Body model > Key's associated model > default 'demo-ai-chat'
+  const targetModel = requestedModel || matchedModel || "demo-ai-chat";
+  (req as any).authorizedModel = targetModel;
   next();
 }
 
-// Inference endpoints
+// Inference execution engine
+async function runModelInference(modelId: string, body: any) {
+  const { message, prompt, system_prompt, history, think_level, audio, image, video, voice_choice, response_type, response_mode } = body || {};
+  const userText = message || prompt || "";
+  const requestedResponseType = response_type || response_mode || "both";
+
+  if (modelId === "demo-ai-hr") {
+    const hrData = handleDemoAiHr(userText);
+    const cleaned = cleanHrResponse(hrData[0]);
+    return { success: true, model: modelId, cleaned_text: cleaned, data: hrData };
+  }
+
+  if (modelId === "demo-ai-video" || modelId === "demo-ai-1-8B") {
+    const {
+      duration_seconds, duration,
+      frame_multiplier, fps,
+      steps, negative_prompt, quality, seed,
+      guidance_scale, guidance_scale_2, scheduler, flow_shift
+    } = body || {};
+
+    const targetDuration = Number(duration_seconds ?? duration ?? 3.5);
+    const rawFps = Number(frame_multiplier ?? fps ?? 16);
+    const validFps = [16, 32, 64, 128].includes(rawFps) ? rawFps : 16;
+    const numSteps = Number(steps ?? 1);
+
+    const imageInput = await prepareGradioFile(image, "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png");
+    const client = await Client.connect("kulkas2pintu/wan555");
+    const result = await client.predict("/generate_video", {
+      input_image: imageInput,
+      last_image: null,
+      prompt: userText || "Generate video animation",
+      steps: numSteps,
+      negative_prompt: negative_prompt || "",
+      duration_seconds: targetDuration,
+      guidance_scale: Number(guidance_scale ?? 1),
+      guidance_scale_2: Number(guidance_scale_2 ?? 1),
+      seed: Number(seed ?? 42),
+      randomize_seed: seed === undefined,
+      quality: Number(quality ?? 1),
+      scheduler: scheduler || "FlowMatchEulerDiscrete",
+      flow_shift: Number(flow_shift ?? 0.5),
+      frame_multiplier: validFps,
+      video_component: true,
+      safe_mode: true
+    });
+    const cleaned = cleanVideoResponse(result.data);
+    return { success: true, model: modelId, cleaned_text: cleaned, data: result.data };
+  }
+
+  if (modelId === "demo-ai-chat") {
+    const client = await Client.connect("tencent/Hy3");
+    const result = await client.predict("/chat", {
+      message: userText || "Hello",
+      system_prompt: system_prompt || "",
+      history: history || null,
+      think_level: think_level || "high",
+      temperature: null,
+      max_tokens: 0,
+      top_p: 0,
+      preserved_thinking: null,
+      functions_json_str: "",
+    });
+    const cleaned = cleanChatResponse(result.data);
+    return { success: true, model: modelId, cleaned_text: cleaned, data: result.data };
+  }
+
+  if (modelId === "demo-ai-pro") {
+    const client = await Client.connect("Qwen/Qwen3.5-Omni-Online-Demo");
+    const mediaSource = audio || video;
+    const finalAudioInput = await prepareGradioFile(mediaSource, client, "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/audio_sample.wav");
+
+    const result = await client.predict("/media_predict", [
+      finalAudioInput,
+      null,
+      history || [],
+      voice_choice || "Tina / 中文-甜甜",
+      0.1,
+      0.05,
+      1
+    ]);
+    const cleaned = cleanProResponse(result.data, requestedResponseType);
+    return { success: true, model: modelId, cleaned_text: cleaned, data: result.data };
+  }
+
+  if (modelId === "demo-ai-image") {
+    const client = await Client.connect("ghjjhv/Qwen-Image-Edit-2511-LoRAs-Fast");
+    const imageInput = await prepareGradioFile(image, client, "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png");
+    const fileList = imageInput ? (Array.isArray(imageInput) ? imageInput : [imageInput]) : [];
+    const result = await client.predict("/infer", {
+      images: fileList,
+      prompt: userText || "Hello!!",
+      lora_adapter: body?.lora_adapter || "Photo-to-Anime",
+      seed: 0,
+      randomize_seed: true,
+      guidance_scale: 1.0,
+      steps: 4,
+    });
+    const cleaned = cleanImageResponse(result.data);
+    return { success: true, model: modelId, cleaned_text: cleaned, data: result.data };
+  }
+
+  throw new Error(`Unsupported or unknown model ID: "${modelId}"`);
+}
+
+// Unified Endpoint Handler
+const handleInferenceRequest = async (req: express.Request, res: express.Response) => {
+  const modelId = req.params.modelId || req.body.model || (req as any).authorizedModel || "demo-ai-chat";
+  
+  console.log(`[API Request] Route: ${req.path} | Model: ${modelId}`);
+
+  try {
+    const result = await runModelInference(modelId, req.body);
+    return res.json(result);
+  } catch (err: any) {
+    const errorStr = extractErrorString(err);
+    console.error(`Inference error for model "${modelId}":`, err);
+
+    let friendlyMessage = errorStr;
+    if (errorStr.includes("ZeroGPU") || errorStr.includes("quota")) {
+      friendlyMessage = "ZeroGPU quota limit reached on Hugging Face space. Please wait a few seconds and try again.";
+    }
+
+    return res.status(500).json({
+      success: false,
+      model: modelId,
+      error: friendlyMessage,
+      raw_error: errorStr
+    });
+  }
+};
+
+// API v1 Model Endpoints
+app.post("/api/v1/chat", verifyApiKey, handleInferenceRequest);
+app.post("/api/v1/predict", verifyApiKey, handleInferenceRequest);
+app.post("/api/v1/:modelId/chat", verifyApiKey, handleInferenceRequest);
+app.post("/api/v1/:modelId/predict", verifyApiKey, handleInferenceRequest);
+app.post("/api/v1/models/:modelId/chat", verifyApiKey, handleInferenceRequest);
+app.post("/api/v1/models/:modelId/predict", verifyApiKey, handleInferenceRequest);
+
+// UI Playground Direct Test Route
+app.post("/api/test-model/:modelId", handleInferenceRequest);
+
+// Public API Documentation & Model Specifications Route
+app.get(["/api/v1/models", "/api/v1/docs"], (req, res) => {
+  res.json({
+    success: true,
+    auth: {
+      type: "API Key Header or Bearer Token",
+      headers: ["Authorization: Bearer <YOUR_API_KEY>", "X-API-Key: <YOUR_API_KEY>"]
+    },
+    endpoints: [
+      { path: "/api/v1/chat", method: "POST", description: "Universal model endpoint (requires 'model' in request JSON body)" },
+      { path: "/api/v1/:modelId/chat", method: "POST", description: "Direct model-specific chat endpoint" },
+      { path: "/api/v1/models/:modelId/predict", method: "POST", description: "Direct model-specific prediction endpoint" }
+    ],
+    models: [
+      {
+        id: "demo-ai-chat",
+        name: "Demo-AI Chat",
+        description: "Advanced conversational reasoning model with thinking capabilities",
+        request_schema: {
+          model: "demo-ai-chat",
+          message: "string (Required) - User text message",
+          system_prompt: "string (Optional) - System instructions",
+          think_level: "string (Optional) - 'high' | 'medium' | 'low'"
+        },
+        response_example: {
+          success: true,
+          model: "demo-ai-chat",
+          cleaned_text: "الذكاء الاصطناعي هو...",
+          data: [ [ { "role": "assistant", "content": "..." } ] ]
+        }
+      },
+      {
+        id: "demo-ai-video",
+        name: "Demo-AI video",
+        description: "Wan 2.2 14B Image-to-Video generation",
+        request_schema: {
+          model: "demo-ai-video",
+          prompt: "string (Optional) - Video animation description",
+          image: "string (Required) - Image URL or Base64 data:image/png;base64,...",
+          duration_seconds: "number (Optional) - Duration in seconds (0.5 to 10.0)",
+          frame_multiplier: "number (Optional) - FPS: 16 | 32 | 64 | 128",
+          steps: "number (Optional) - Inference steps (1 to 30)"
+        },
+        response_example: {
+          success: true,
+          model: "demo-ai-video",
+          cleaned_text: "[Generated Video Available](https://.../video.mp4)",
+          data: [ { "video": { "url": "https://.../video.mp4" } } ]
+        }
+      },
+      {
+        id: "demo-ai-pro",
+        name: "Demo-AI Pro (Omni)",
+        description: "Multimodal Omni model for text, voice, and video interaction",
+        request_schema: {
+          model: "demo-ai-pro",
+          audio: "string (Optional) - Base64 audio or WAV URL",
+          video: "string (Optional) - Base64 video or MP4 URL",
+          voice_choice: "string (Optional) - Voice name e.g. 'Tina / 中文-甜甜'",
+          response_type: "string (Optional) - 'both' | 'text' | 'audio'"
+        },
+        response_example: {
+          success: true,
+          model: "demo-ai-pro",
+          cleaned_text: "Text response...\n\n[Audio Response Available](https://.../audio.wav)",
+          data: [ { "name": "https://.../audio.wav" }, "Text response..." ]
+        }
+      },
+      {
+        id: "demo-ai-image",
+        name: "Demo-AI Image",
+        description: "Qwen Image Edit with LoRA adapter support",
+        request_schema: {
+          model: "demo-ai-image",
+          prompt: "string (Optional) - Style modification prompt",
+          image: "string (Required) - Base64 image or Image URL",
+          lora_adapter: "string (Optional) - 'Photo-to-Anime'"
+        },
+        response_example: {
+          success: true,
+          model: "demo-ai-image",
+          cleaned_text: "[Generated Image Available](https://.../edited.png)",
+          data: [ [ { "url": "https://.../edited.png" } ] ]
+        }
+      },
+      {
+        id: "demo-ai-hr",
+        name: "Demo-AI HR (Web View)",
+        description: "HR Assistant assistant integration",
+        request_schema: {
+          model: "demo-ai-hr",
+          message: "string (Required) - HR inquiry text"
+        },
+        response_example: {
+          success: true,
+          model: "demo-ai-hr",
+          cleaned_text: "تم فحص السجلات ونظام الـ HR بنجاح...",
+          data: [ "[System Notice...]" ]
+        }
+      }
+    ]
+  });
+});
+
 // Helper to prepare Gradio file objects asynchronously from Base64 or URL
 async function prepareGradioFile(input: string | null | undefined, clientOrFallback?: any, fallbackUrl?: string): Promise<any> {
   let client: any = null;
@@ -456,234 +721,6 @@ function extractErrorString(err: any): string {
     return String(err);
   }
 }
-
-app.post("/api/v1/chat", verifyApiKey, async (req, res) => {
-  const modelId = (req as any).authorizedModel;
-  const { message, system_prompt, history, think_level, audio, image, video, voice_choice, response_type, response_mode } = req.body;
-  const requestedResponseType = response_type || response_mode || "both";
-
-  try {
-    if (modelId === "demo-ai-hr") {
-      const hrData = handleDemoAiHr(message);
-      const cleaned = cleanHrResponse(hrData[0]);
-      return res.json({ success: true, model: modelId, data: hrData, cleaned_text: cleaned });
-    }
-
-    if (modelId === "demo-ai-video" || modelId === "demo-ai-1-8B") {
-      const {
-        duration_seconds, duration,
-        frame_multiplier, fps,
-        steps, negative_prompt, quality, seed,
-        guidance_scale, guidance_scale_2, scheduler, flow_shift
-      } = req.body;
-
-      const targetDuration = Number(duration_seconds ?? duration ?? 3.5);
-      const rawFps = Number(frame_multiplier ?? fps ?? 16);
-      const validFps = [16, 32, 64, 128].includes(rawFps) ? rawFps : 16;
-      const numSteps = Number(steps ?? 1);
-
-      const imageInput = await prepareGradioFile(image, "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png");
-      const client = await Client.connect("kulkas2pintu/wan555");
-      const result = await client.predict("/generate_video", {
-        input_image: imageInput,
-        last_image: null,
-        prompt: message || "Generate video animation",
-        steps: numSteps,
-        negative_prompt: negative_prompt || "",
-        duration_seconds: targetDuration,
-        guidance_scale: Number(guidance_scale ?? 1),
-        guidance_scale_2: Number(guidance_scale_2 ?? 1),
-        seed: Number(seed ?? 42),
-        randomize_seed: seed === undefined,
-        quality: Number(quality ?? 1),
-        scheduler: scheduler || "FlowMatchEulerDiscrete",
-        flow_shift: Number(flow_shift ?? 0.5),
-        frame_multiplier: validFps,
-        video_component: true,
-        safe_mode: true
-      });
-      const cleaned = cleanVideoResponse(result.data);
-      return res.json({ success: true, model: modelId, data: result.data, cleaned_text: cleaned });
-    }
-
-    if (modelId === "demo-ai-chat") {
-      const client = await Client.connect("tencent/Hy3");
-      const result = await client.predict("/chat", {
-        message: message || "...",
-        system_prompt: system_prompt || "",
-        history: history || null,
-        think_level: think_level || "high",
-        temperature: null,
-        max_tokens: 0,
-        top_p: 0,
-        preserved_thinking: null,
-        functions_json_str: "",
-      });
-      const cleaned = cleanChatResponse(result.data);
-      return res.json({ success: true, model: modelId, data: result.data, cleaned_text: cleaned });
-    }
-
-    if (modelId === "demo-ai-pro") {
-      const client = await Client.connect("Qwen/Qwen3.5-Omni-Online-Demo");
-      const mediaSource = audio || video;
-      const finalAudioInput = await prepareGradioFile(mediaSource, client, "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/audio_sample.wav");
-
-      const result = await client.predict("/media_predict", [
-        finalAudioInput,
-        null,
-        history || [],
-        voice_choice || "Tina / 中文-甜甜",
-        0.1,
-        0.05,
-        1
-      ]);
-      const cleaned = cleanProResponse(result.data, requestedResponseType);
-      return res.json({ success: true, model: modelId, data: result.data, cleaned_text: cleaned });
-    }
-
-    if (modelId === "demo-ai-image") {
-      const client = await Client.connect("ghjjhv/Qwen-Image-Edit-2511-LoRAs-Fast");
-      const imageInput = await prepareGradioFile(image, client, "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png");
-      const fileList = imageInput ? (Array.isArray(imageInput) ? imageInput : [imageInput]) : [];
-      const result = await client.predict("/infer", {
-        images: fileList,
-        prompt: message || "Hello!!",
-        lora_adapter: "Photo-to-Anime",
-        seed: 0,
-        randomize_seed: true,
-        guidance_scale: 1.0,
-        steps: 4,
-      });
-      const cleaned = cleanImageResponse(result.data);
-      return res.json({ success: true, model: modelId, data: result.data, cleaned_text: cleaned });
-    }
-
-    return res.status(400).json({ error: "Unsupported model routing" });
-  } catch (err: any) {
-    console.error(`Inference error for ${modelId}:`, err);
-    return res.status(500).json({ error: extractErrorString(err) });
-  }
-});
-
-// Direct dashboard test endpoint (no api key required if session token valid or called from UI)
-app.post("/api/test-model/:modelId", async (req, res) => {
-  const { modelId } = req.params;
-  const { message, image, audio, video, system_prompt, history, think_level, voice_choice, response_type, response_mode } = req.body;
-  const requestedResponseType = response_type || response_mode || "both";
-  
-  console.log(`[API Request] POST /api/test-model/${modelId}`, { message, hasImage: !!image, hasAudio: !!audio, hasVideo: !!video, system_prompt, think_level, responseType: requestedResponseType });
-
-  try {
-    if (modelId === "demo-ai-hr") {
-      const hrData = handleDemoAiHr(message);
-      const cleaned = cleanHrResponse(hrData[0]);
-      return res.json({ success: true, data: hrData, cleaned_text: cleaned });
-    }
-
-    if (modelId === "demo-ai-video" || modelId === "demo-ai-1-8B") {
-      const {
-        duration_seconds, duration,
-        frame_multiplier, fps,
-        steps, negative_prompt, quality, seed,
-        guidance_scale, guidance_scale_2, scheduler, flow_shift
-      } = req.body;
-
-      const targetDuration = Number(duration_seconds ?? duration ?? 3.5);
-      const rawFps = Number(frame_multiplier ?? fps ?? 16);
-      const validFps = [16, 32, 64, 128].includes(rawFps) ? rawFps : 16;
-      const numSteps = Number(steps ?? 1);
-
-      const imageInput = await prepareGradioFile(image, "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png");
-      const client = await Client.connect("kulkas2pintu/wan555");
-      const result = await client.predict("/generate_video", {
-        input_image: imageInput,
-        last_image: null,
-        prompt: message || "Animate this image",
-        steps: numSteps,
-        negative_prompt: negative_prompt || "",
-        duration_seconds: targetDuration,
-        guidance_scale: Number(guidance_scale ?? 1),
-        guidance_scale_2: Number(guidance_scale_2 ?? 1),
-        seed: Number(seed ?? 42),
-        randomize_seed: seed === undefined,
-        quality: Number(quality ?? 1),
-        scheduler: scheduler || "FlowMatchEulerDiscrete",
-        flow_shift: Number(flow_shift ?? 0.5),
-        frame_multiplier: validFps,
-        video_component: true,
-        safe_mode: true
-      });
-      const cleaned = cleanVideoResponse(result.data);
-      return res.json({ success: true, data: result.data, cleaned_text: cleaned });
-    }
-
-    if (modelId === "demo-ai-chat") {
-      const client = await Client.connect("tencent/Hy3");
-      const result = await client.predict("/chat", {
-        message: message || "Hello",
-        system_prompt: system_prompt || "",
-        history: history || null,
-        think_level: think_level || "high",
-        temperature: null,
-        max_tokens: 0,
-        top_p: 0,
-        preserved_thinking: null,
-        functions_json_str: "",
-      });
-      const cleaned = cleanChatResponse(result.data);
-      return res.json({ success: true, data: result.data, cleaned_text: cleaned });
-    }
-
-    if (modelId === "demo-ai-pro") {
-      const client = await Client.connect("Qwen/Qwen3.5-Omni-Online-Demo");
-      console.log("DEBUG: Calling media_predict...");
-      
-      const mediaSource = audio || video;
-      const finalAudioInput = await prepareGradioFile(mediaSource, client, "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/audio_sample.wav");
-
-      const result = await client.predict("/media_predict", [
-        finalAudioInput, 
-        null,
-        history || [],
-        voice_choice || "Tina / 中文-甜甜",
-        0.1,
-        0.05,
-        1
-      ]);
-      
-      console.log("DEBUG: Result:", JSON.stringify(result.data));
-      const cleaned = cleanProResponse(result.data, requestedResponseType);
-      return res.json({ success: true, data: result.data, cleaned_text: cleaned });
-    }
-
-    if (modelId === "demo-ai-image") {
-      const client = await Client.connect("ghjjhv/Qwen-Image-Edit-2511-LoRAs-Fast");
-      console.log("DEBUG: Calling infer...");
-      const imageInput = await prepareGradioFile(image, client, "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png");
-      const fileList = imageInput ? (Array.isArray(imageInput) ? imageInput : [imageInput]) : [];
-      
-      const result = await client.predict("/infer", {
-        images: fileList,
-        prompt: message || "Hello!!",
-        lora_adapter: "Photo-to-Anime",
-        seed: 0,
-        randomize_seed: true,
-        guidance_scale: 1.0,
-        steps: 4,
-      });
-      
-      console.log("DEBUG: Result:", JSON.stringify(result.data));
-      const cleaned = cleanImageResponse(result.data);
-      return res.json({ success: true, data: result.data, cleaned_text: cleaned });
-    }
-
-    return res.status(404).json({ error: "Model not found" });
-  } catch (err: any) {
-    const errorMsg = extractErrorString(err);
-    console.error(`Test model error for ${modelId}:`, err);
-    return res.status(500).json({ error: errorMsg, details: err });
-  }
-});
 
 // Fallback for any unmatched /api/* routes to return JSON instead of HTML
 app.use("/api/*", (req, res) => {
