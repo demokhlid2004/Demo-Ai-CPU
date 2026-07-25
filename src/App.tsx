@@ -1469,9 +1469,9 @@ export default function App() {
                     }
 
                     // Create codes
-                    jsCode = `const apiKey = "${modelKey}";\nconst url = "http://\${window.location.host}${pathInfo}";\n\nconst payload = ${curlPayload};\n\nfetch(url, {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "Authorization": \`Bearer \${apiKey}\`\n  },\n  body: JSON.stringify(payload)\n})\n.then(response => response.json())\n.then(result => {\n  console.log("Success:", result.success);\n  console.log("Text response:", result.cleaned_text);\n  console.log("Raw Response Data:", result.data);\n})\n.catch(error => console.error("Error:", error));`;
+                    jsCode = `const apiKey = "${modelKey}";\nconst url = "https://demo-ai-cpu.onrender.com${pathInfo}";\n\nconst payload = ${curlPayload};\n\nfetch(url, {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "Authorization": \`Bearer \${apiKey}\`\n  },\n  body: JSON.stringify(payload)\n})\n.then(response => response.json())\n.then(result => {\n  console.log("Success:", result.success);\n  console.log("Text response:", result.cleaned_text);\n  console.log("Raw Response Data:", result.data);\n})\n.catch(error => console.error("Error:", error));`;
 
-                    pythonCode = `import requests\n\napi_key = "${modelKey}"\nurl = "http://127.0.0.1:3000${pathInfo}"\n\nheaders = {\n    "Content-Type": "application/json",\n    "Authorization": f"Bearer {api_key}"\n}\n\npayload = ${curlPayload.replace(/true/g, 'True').replace(/false/g, 'False').replace(/null/g, 'None')}\n\ntry:\n    response = requests.post(url, headers=headers, json=payload)\n    data = response.json()\n    if data.get("success"):\n        print("Success!")\n        print("Cleaned Text Output:", data.get("cleaned_text"))\n        print("Raw Gradio Data:", data.get("data"))\n    else:\n        print("Error:", data.get("error"))\nexcept Exception as e:\n    print("Connection failed:", e)`;
+                    pythonCode = `import requests\n\napi_key = "${modelKey}"\nurl = "https://demo-ai-cpu.onrender.com${pathInfo}"\n\nheaders = {\n    "Content-Type": "application/json",\n    "Authorization": f"Bearer {api_key}"\n}\n\npayload = ${curlPayload.replace(/true/g, 'True').replace(/false/g, 'False').replace(/null/g, 'None')}\n\ntry:\n    response = requests.post(url, headers=headers, json=payload)\n    data = response.json()\n    if data.get("success"):\n        print("Success!")\n        print("Cleaned Text Output:", data.get("cleaned_text"))\n        print("Raw Gradio Data:", data.get("data"))\n    else:\n        print("Error:", data.get("error"))\nexcept Exception as e:\n    print("Connection failed:", e)`;
 
                     return (
                       <div className="space-y-6">
@@ -1586,7 +1586,7 @@ export default function App() {
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-2">
                             <button
                               onClick={() => {
-                                const codeContent = activeCodeLang === "curl" ? `curl -X POST http://\${window.location.host}${pathInfo} \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${modelKey}" \\\n  -d '${curlPayload}'` : activeCodeLang === "js" ? jsCode : pythonCode;
+                                const codeContent = activeCodeLang === "curl" ? `curl -X POST https://demo-ai-cpu.onrender.com${pathInfo} \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${modelKey}" \\\n  -d '${curlPayload}'` : activeCodeLang === "js" ? jsCode : pythonCode;
                                 copyToClipboard(codeContent, "snip");
                               }}
                               className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 transition-all cursor-pointer self-start md:self-auto"
@@ -1616,7 +1616,7 @@ export default function App() {
                           </div>
 
                           <pre className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 font-mono overflow-x-auto leading-relaxed text-left">
-                            {activeCodeLang === "curl" ? `curl -X POST http://\${window.location.host}${pathInfo} \\
+                            {activeCodeLang === "curl" ? `curl -X POST https://demo-ai-cpu.onrender.com${pathInfo} \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${modelKey}" \\
   -d '${curlPayload}'` : activeCodeLang === "js" ? jsCode : pythonCode}
