@@ -49,6 +49,8 @@ export default function App() {
   const [chatHistory, setChatHistory] = useState<Array<{ role: string; content: string; image?: string; audio?: string }>>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [apiOutput, setApiOutput] = useState<any>(null);
+  const [proxyUrl, setProxyUrl] = useState<string>(localStorage.getItem("demo_ai_proxy_url") || "");
+  const [proxyRenewUrl, setProxyRenewUrl] = useState<string>(localStorage.getItem("demo_ai_proxy_renew_url") || "");
 
   // Video Model Parameters (demo-ai-video)
   const [videoDuration, setVideoDuration] = useState<number>(3.5);
@@ -430,6 +432,8 @@ export default function App() {
           duration_seconds: videoDuration,
           frame_multiplier: videoFps,
           steps: videoSteps,
+          proxy_url: proxyUrl,
+          proxy_renew_url: proxyRenewUrl,
           history: newHistory
         })
       });
@@ -1034,6 +1038,47 @@ export default function App() {
                         <input type="file" accept="video/*" className="hidden" onChange={handleVideoSelect} />
                       </label>
                     </div>
+                  </div>
+                )}
+
+                {(selectedModelId === "demo-ai-image" || selectedModelId === "demo-ai-video") && (
+                  <div className="p-3.5 rounded-xl bg-[#09090b] border border-zinc-800 text-xs space-y-3">
+                    <div className="font-semibold text-blue-400 flex items-center gap-1.5">
+                      <Shield className="w-4 h-4 text-blue-500" />
+                      <span>🛡️ إعدادات حماية الاتصال وتغيير الـ IP:</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-medium text-zinc-400">عنوان البروكسي (Proxy URL):</label>
+                      <input
+                        type="text"
+                        value={proxyUrl}
+                        onChange={(e) => {
+                          setProxyUrl(e.target.value);
+                          localStorage.setItem("demo_ai_proxy_url", e.target.value);
+                        }}
+                        placeholder="e.g. http://username:password@ip:port"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#141417] border border-zinc-800 text-zinc-200 text-xs focus:outline-none focus:border-blue-500 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-medium text-zinc-400">رابط تجديد/تغيير الآي بي (IP Rotation URL):</label>
+                      <input
+                        type="text"
+                        value={proxyRenewUrl}
+                        onChange={(e) => {
+                          setProxyRenewUrl(e.target.value);
+                          localStorage.setItem("demo_ai_proxy_renew_url", e.target.value);
+                        }}
+                        placeholder="e.g. https://changeip.com/api/change?key=..."
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#141417] border border-zinc-800 text-zinc-200 text-xs focus:outline-none focus:border-blue-500 font-mono"
+                      />
+                    </div>
+
+                    <p className="text-[10px] text-zinc-500 leading-normal">
+                      سيتم توجيه طلبات الصور والفيديو عبر البروكسي المحدد، وسيتجدد العنوان (IP) تلقائياً قبل كل طلب لحماية وتأمين الاتصال بنسبة 100%.
+                    </p>
                   </div>
                 )}
               </div>
