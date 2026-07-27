@@ -33,13 +33,18 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "7422079605:AAF45cu
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "8054055399";
 
 // In-memory state for API Keys and Sessions
+const generateKey = (prefix: string) => {
+  const hash = crypto.createHash("sha256").update(prefix + "_" + ADMIN_PASS).digest("hex").slice(0, 12);
+  return `da_key_${prefix}_${hash}`;
+};
+
 const modelApiKeys: Record<string, string> = {
-  "demo-ai-hr": "da_key_hr_" + crypto.randomBytes(8).toString("hex"),
-  "demo-ai-video": "da_key_video_" + crypto.randomBytes(8).toString("hex"),
-  "demo-ai-chat": "da_key_chat_" + crypto.randomBytes(8).toString("hex"),
-  "demo-ai-pro": "da_key_pro_" + crypto.randomBytes(8).toString("hex"),
-  "demo-ai-image": "da_key_image_" + crypto.randomBytes(8).toString("hex"),
-  "demo-ai-nano": "da_key_nano_" + crypto.randomBytes(8).toString("hex"),
+  "demo-ai-hr": process.env.API_KEY_HR || generateKey("hr"),
+  "demo-ai-video": process.env.API_KEY_VIDEO || generateKey("video"),
+  "demo-ai-chat": process.env.API_KEY_CHAT || generateKey("chat"),
+  "demo-ai-pro": process.env.API_KEY_PRO || generateKey("pro"),
+  "demo-ai-image": process.env.API_KEY_IMAGE || generateKey("image"),
+  "demo-ai-nano": process.env.API_KEY_NANO || generateKey("nano"),
 };
 
 const activeSessions = new Set<string>();
@@ -1132,6 +1137,17 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Demo-AI Server running on http://0.0.0.0:${PORT}`);
+    
+    // Render Free Tier Keep-Alive (Anti-Idle)
+    const externalUrl = process.env.RENDER_EXTERNAL_URL;
+    if (externalUrl) {
+      console.log(`[Keep-Alive] Configured to ping external URL: ${externalUrl} every 5 minutes`);
+      setInterval(() => {
+        fetch(`${externalUrl}/api/v1/docs`)
+          .then(res => console.log(`[Keep-Alive] Ping successful - Status: ${res.status}`))
+          .catch(err => console.error(`[Keep-Alive] Ping failed:`, err.message));
+      }, 5 * 60 * 1000);
+    }
   });
 }
 
