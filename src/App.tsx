@@ -57,6 +57,10 @@ export default function App() {
   const [videoFps, setVideoFps] = useState<number>(16);
   const [videoSteps, setVideoSteps] = useState<number>(5);
 
+  // Nano Model Parameters (demo-ai-nano)
+  const [nanoAspectRatio, setNanoAspectRatio] = useState<string>("1:1");
+  const [nanoSeed, setNanoSeed] = useState<number>(-1);
+
   // Media Attachment State for Playground
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [attachedAudio, setAttachedAudio] = useState<string | null>(null);
@@ -432,6 +436,8 @@ export default function App() {
           duration_seconds: videoDuration,
           frame_multiplier: videoFps,
           steps: videoSteps,
+          aspect_ratio: nanoAspectRatio,
+          seed: nanoSeed,
           proxy_url: proxyUrl,
           proxy_renew_url: proxyRenewUrl,
           history: newHistory
@@ -1041,7 +1047,54 @@ export default function App() {
                   </div>
                 )}
 
-                {(selectedModelId === "demo-ai-image" || selectedModelId === "demo-ai-video") && (
+                {selectedModelId === "demo-ai-nano" && (
+                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-3">
+                    <div className="font-semibold text-amber-300 flex items-center gap-1.5 justify-end">
+                      <span>إعدادات توليد الصور (Image Specs)</span>
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                    </div>
+                    
+                    {/* Aspect Ratio Selector */}
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-zinc-300 font-medium block text-right">مقاس وأبعاد الصورة (Aspect Ratio):</span>
+                      <div className="grid grid-cols-5 gap-1.5 font-mono">
+                        {["1:1", "3:4", "4:3", "9:16", "16:9"].map((ratio) => (
+                          <button
+                            key={ratio}
+                            type="button"
+                            onClick={() => setNanoAspectRatio(ratio)}
+                            className={`px-1.5 py-1 rounded text-[11px] text-center border font-bold transition-all cursor-pointer ${
+                              nanoAspectRatio === ratio
+                                ? "bg-amber-600 border-amber-500 text-white shadow-md shadow-amber-600/20"
+                                : "bg-[#141417] border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                            }`}
+                          >
+                            {ratio}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Seed input */}
+                    <div className="space-y-1.5 pt-2 border-t border-amber-500/20 text-right">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-mono text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30">
+                          {nanoSeed === -1 ? "عشوائي (Random)" : nanoSeed}
+                        </span>
+                        <span className="text-zinc-300 font-medium">بذرة التوليد (Seed):</span>
+                      </div>
+                      <input
+                        type="number"
+                        value={nanoSeed}
+                        onChange={(e) => setNanoSeed(e.target.value === "" ? -1 : parseInt(e.target.value, 10))}
+                        placeholder="استخدم -1 للتوليد العشوائي"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#141417] border border-zinc-800 text-zinc-200 text-xs focus:outline-none focus:border-amber-500 text-center font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {(selectedModelId === "demo-ai-image" || selectedModelId === "demo-ai-video" || selectedModelId === "demo-ai-nano") && (
                   <div className="p-3.5 rounded-xl bg-[#09090b] border border-zinc-800 text-xs space-y-3">
                     <div className="font-semibold text-blue-400 flex items-center gap-1.5">
                       <Shield className="w-4 h-4 text-blue-500" />
@@ -1437,7 +1490,8 @@ export default function App() {
                           m.id === "demo-ai-hr" ? "bg-emerald-500" :
                           m.id === "demo-ai-video" ? "bg-blue-500" :
                           m.id === "demo-ai-chat" ? "bg-purple-500" :
-                          m.id === "demo-ai-pro" ? "bg-indigo-500" : "bg-amber-500"
+                          m.id === "demo-ai-pro" ? "bg-indigo-500" :
+                          m.id === "demo-ai-nano" ? "bg-amber-500" : "bg-rose-500"
                         }`}></span>
                       </button>
                     ))}
@@ -1505,6 +1559,14 @@ export default function App() {
                         { name: "lora_adapter", type: "String", req: "اختياري (Optional)", desc: "الفلتر المطبق، افتراضياً: <code>'Photo-to-Anime'</code>." }
                       );
                       curlPayload = `{\n  "model": "demo-ai-image",\n  "image": "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png",\n  "prompt": "تحويل هذه الصورة إلى أسلوب الأنمي الياباني القديم",\n  "lora_adapter": "Photo-to-Anime"\n}`;
+                    } else if (activeModel.id === "demo-ai-nano") {
+                      pathInfo = "/api/v1/predict";
+                      reqParameters.push(
+                        { name: "prompt", type: "String", req: "مطلوب (Required)", desc: "الوصف النصي للصورة المراد توليدها باللغة العربية أو الإنجليزية (سيتم ترجمتها للإنجليزية تلقائياً)." },
+                        { name: "aspect_ratio", type: "String", req: "اختياري (Optional)", desc: "أبعاد ونسب الصورة المطلوبة: <code>'1:1'</code> | <code>'3:4'</code> | <code>'4:3'</code> | <code>'9:16'</code> | <code>'16:9'</code>." },
+                        { name: "seed", type: "Number", req: "اختياري (Optional)", desc: "بذرة التوليد لتثبيت النتائج، ضع <code>-1</code> للتوليد العشوائي." }
+                      );
+                      curlPayload = `{\n  "model": "demo-ai-nano",\n  "prompt": "سيارة رياضية خارقة تسير في شوارع مدينة نيون مستقبلية ذات طابع سايبربانك",\n  "aspect_ratio": "16:9",\n  "seed": -1\n}`;
                     } else if (activeModel.id === "demo-ai-hr") {
                       pathInfo = "/api/v1/chat";
                       reqParameters.push(

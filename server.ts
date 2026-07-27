@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { Client, handle_file } from "@gradio/client";
+import { GoogleGenAI } from "@google/genai";
 import http from "http";
 import https from "https";
 import net from "net";
@@ -38,6 +39,7 @@ const modelApiKeys: Record<string, string> = {
   "demo-ai-chat": "da_key_chat_" + crypto.randomBytes(8).toString("hex"),
   "demo-ai-pro": "da_key_pro_" + crypto.randomBytes(8).toString("hex"),
   "demo-ai-image": "da_key_image_" + crypto.randomBytes(8).toString("hex"),
+  "demo-ai-nano": "da_key_nano_" + crypto.randomBytes(8).toString("hex"),
 };
 
 const activeSessions = new Set<string>();
@@ -278,6 +280,55 @@ function cleanImageResponse(raw: any): string {
   return typeof raw === "string" ? raw : "";
 }
 
+// Arabic to English translation helper using Gemini with MyMemory fallback
+async function translateArabicToEnglish(text: string): Promise<string> {
+  if (!text || text.trim().length === 0) return "";
+  
+  // Detect if there are any Arabic characters in the text
+  const arRegex = /[\u0600-\u06FF]/;
+  if (!arRegex.test(text)) {
+    console.log("[Translation] No Arabic characters detected, skipping translation.");
+    return text;
+  }
+
+  console.log(`[Translation] Arabic detected. Translating to English: "${text}"`);
+
+  // 1. Try Gemini first (if key is set)
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `Translate this Arabic image generation prompt into a descriptive English image generation prompt. Output ONLY the translated English text, nothing else, no greetings, no introductory words:\n\n${text}`
+      });
+      const translated = response.text?.trim();
+      if (translated && translated.length > 0) {
+        console.log(`[Translation] Translated via Gemini successfully: "${translated}"`);
+        return translated;
+      }
+    } catch (err) {
+      console.error("[Translation] Gemini translation failed, falling back:", err);
+    }
+  }
+
+  // 2. Fallback to MyMemory Free translation API
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=ar|en`;
+    const res = await fetch(url);
+    const data = await res.json() as any;
+    if (data && data.responseData && data.responseData.translatedText) {
+      const translated = data.responseData.translatedText;
+      console.log(`[Translation] Translated via MyMemory successfully: "${translated}"`);
+      return translated;
+    }
+  } catch (err) {
+    console.error("[Translation] MyMemory translation failed:", err);
+  }
+
+  // Return original text if all failed
+  return text;
+}
+
 // Response cleaning helper for Demo-AI Pro (Qwen3.5 Omni Gradio space)
 function cleanProResponse(raw: any, responseType: string = "both"): string {
   if (!raw) return "";
@@ -462,6 +513,15 @@ app.get("/api/models", verifyAdminSession, (req, res) => {
       endpoint: "/infer",
       description: "Image editing model with LoRA adapters",
       apiKey: modelApiKeys["demo-ai-image"]
+    },
+    {
+      id: "demo-ai-nano",
+      name: "Demo-AI Nano",
+      space: "hidream-ai/hidream-i1-dev",
+      type: "gradio",
+      endpoint: "/generate_with_status",
+      description: "Fast High-Quality text-to-image generator with Arabic translation support",
+      apiKey: modelApiKeys["demo-ai-nano"]
     }
   ];
   res.json({ success: true, models: modelsInfo });
@@ -472,7 +532,7 @@ app.post("/api/models/:modelId/regenerate-key", verifyAdminSession, (req, res) =
   if (!modelApiKeys[modelId]) {
     return res.status(404).json({ success: false, message: "Model not found" });
   }
-  const prefix = modelId === "demo-ai-hr" ? "hr" : modelId === "demo-ai-video" ? "video" : modelId === "demo-ai-chat" ? "chat" : modelId === "demo-ai-image" ? "image" : "pro";
+  const prefix = modelId === "demo-ai-hr" ? "hr" : modelId === "demo-ai-video" ? "video" : modelId === "demo-ai-chat" ? "chat" : modelId === "demo-ai-image" ? "image" : modelId === "demo-ai-nano" ? "nano" : "pro";
   const newKey = `da_key_${prefix}_` + crypto.randomBytes(8).toString("hex");
   modelApiKeys[modelId] = newKey;
   res.json({ success: true, apiKey: newKey });
@@ -793,6 +853,38 @@ async function runWithProxyAndRenewal<T>(
     });
   }
 
+  if (modelId === "demo-ai-nano") {
+    const proxyUrl = body?.proxy_url || process.env.PROXY_URL;
+    const proxyRenewUrl = body?.proxy_renew_url || process.env.PROXY_RENEW_URL;
+
+    return runWithProxyAndRenewal(proxyUrl, proxyRenewUrl, async () => {
+      // Translate Arabic prompt to English if necessary
+      const englishPrompt = await translateArabicToEnglish(userText);
+      const targetRatio = body?.aspect_ratio || "1:1";
+      const targetSeed = Number(body?.seed ?? -1);
+
+      console.log(`[Demo-AI Nano] Connecting to hidream-ai/hidream-i1-dev...`);
+      const client = await Client.connect("hidream-ai/hidream-i1-dev");
+      console.log(`[Demo-AI Nano] Generating with prompt: "${englishPrompt}", ratio: "${targetRatio}", seed: ${targetSeed}`);
+
+      const result = await client.predict("/generate_with_status", {
+        prompt: englishPrompt || "A futuristic city",
+        aspect_ratio: targetRatio,
+        seed: targetSeed
+      });
+
+      const cleaned = cleanImageResponse(result.data);
+      return { 
+        success: true, 
+        model: modelId, 
+        original_prompt: userText,
+        translated_prompt: englishPrompt,
+        cleaned_text: cleaned, 
+        data: result.data 
+      };
+    });
+  }
+
   throw new Error(`Unsupported or unknown model ID: "${modelId}"`);
 }
 
@@ -917,6 +1009,25 @@ app.get(["/api/v1/models", "/api/v1/docs"], (req, res) => {
           model: "demo-ai-image",
           cleaned_text: "[Generated Image Available](https://.../edited.png)",
           data: [ [ { "url": "https://.../edited.png" } ] ]
+        }
+      },
+      {
+        id: "demo-ai-nano",
+        name: "Demo-AI Nano",
+        description: "Fast High-Quality text-to-image generator with automatic Arabic to English translation",
+        request_schema: {
+          model: "demo-ai-nano",
+          prompt: "string (Required) - Desired image description in Arabic or English",
+          aspect_ratio: "string (Optional) - '1:1' | '3:4' | '4:3' | '9:16' | '16:9'",
+          seed: "number (Optional) - seed value or -1 for random"
+        },
+        response_example: {
+          success: true,
+          model: "demo-ai-nano",
+          original_prompt: "سيارة طائرة فوق دبي",
+          translated_prompt: "A flying car over Dubai, futuristic style, extremely detailed",
+          cleaned_text: "[Generated Image Available](https://.../image.png)",
+          data: [ { "url": "https://.../image.png" }, 428193, "Image generated successfully!", {} ]
         }
       },
       {
